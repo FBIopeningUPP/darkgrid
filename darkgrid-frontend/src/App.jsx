@@ -34,7 +34,7 @@ function App() {
       <div className="lobby">
         <h1>DarkGrid</h1>
         <p>Status: {socket.connected ? 'Connected to Server' : 'Connecting...'}</p>
-        <button onClick={() => joinGame('megacorp')}>Join as Megacorp</button>    '
+        <button onClick={() => joinGame('megacorp')}>Join as Megacorp</button>
         <button onClick={() => joinGame('runner')}>Join as Runner</button>                                                                                                             
       </div>
     );
@@ -96,3 +96,5 @@ function App() {
     </div>
   );
 }
+
+export default App;
