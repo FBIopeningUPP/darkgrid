@@ -48,7 +48,51 @@ function App() {
         let zoneClass='';
         if (y <= 2) zoneClass = 'zone-vault';
         else if (y >= 3 && y <= 6) zoneClass = 'zone-firewall';
+        else if (y >= 7) zoneClass = 'zone-slums';
+
+        const isRunner = gameState.players.runners.find(r => r.x === x && r.y === y);
+        const isIceWall = gameState.traps.iceWalls.find(w => w.active && w.x === x && w.y === y);
+        const isSentry = gameState.traps.sentries.find(s => s.active && s.x === x && s.y === y);
+
+        let content = '';
+        if (isRunner) content = '🏃';
+        else if (isIceWall) content = '🧊';                                                                                                                                                    
+        else if (isSentry) content = '👁️';
+
+        tiles.push(
+          <div
+            key={`${x}-${y}`}                                                                                                                                                                  
+            className={`tile ${zoneClass}`}                                                                                                                                                    
+            onClick={() => handleTileClick(x, y)}                                                                                                                                              
+          >
+            {content}
+          </div>
+        );
       }
     }
-  }
+    return tiles;
+  };
+  const handleTileClick = (x, y) => {
+    if (gameState.phase !== 'PLANNING') return;
+    console.log(`Clicked X:${x} Y:${y}`);                                                                                                                                                    
+  };
+  return (                                                                                                                                                                                     
+    <div className="game-container">
+      <div className="sidebar">
+        <h2>{role.toUpperCase()}</h2>
+        <div className="status-box">
+          <p>Phase: <span className="highlight">{gameState.phase}</span></p>
+          <p>Turn: {gameState.turn} / {gameState.maxTurns}</p>
+          {gameState.phase === 'PLANNING' && <p>Time Left: {gameState.timer}s</p>}
+          {role === 'megacorp' && <p>Credits: {gameState.corpCredits || 100}</p>}
+        </div>
+      </div>
+
+      <div className="board">
+        <div className="grid">
+          {renderGrid()}
+        </div>
+       </div>
+    </div>
+  );
 }
