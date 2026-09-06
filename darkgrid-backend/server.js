@@ -27,6 +27,11 @@ let gameState = {
         iceWalls: [],
         sentries: []
     },
+    boardObjects: {
+        fuses: [{x: 1, y: 5, active: true}, {x: 8, y: 5, active: true}, {x: 4, y: 4, active: true}],                                                                                           
+        vents: [{x: 0, y: 3}, {x: 9, y: 6}],                                                                                                                                                   
+        dataNodes: [{x: 2, y: 0, active: true}, {x: 7, y: 0, active: true}]                                                                                                                    
+    },
     timer: 0
 };
 
@@ -40,6 +45,12 @@ function transitionPhase(newPhase) {
     console.log(`[Phase Change] Transiitoning to: ${newPhase}`);
 
     if (newPhase === 'PLANNING') {
+        if (gameState.turn === 1) {
+            gameState.players.runners.forEach(runner => {
+                runner.x = Math.floor(Math.random() * 10);
+                runner.y = 7 + Math.floor(Math.random() * 3);
+            });
+        }
         gameState.timer = 30;
         
         const countdown = setInterval(() => {

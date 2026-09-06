@@ -7,6 +7,11 @@ const socket = io('http://localhost:3001');
 function App() {
   const [role, setRole] = useState(null);
   const [gameState, setGameState] = useState(null);
+  const [queuedActions, setQueuedActions] = useState([]);
+
+  useEffect(() => {
+    setQueuedActions([]);
+  }, [gameState?.turn]);
 
   useEffect(() => {
     socket.on('roleAssigned', (assignedRole) => {
@@ -16,7 +21,7 @@ function App() {
       setGameState(state);
     });
     socket.on('gameOver', ({winner}) => {
-      alert(`${winner}Wins!`);
+      alert(`${winner} Wins!`);
     });
     return () => {
       socket.off('roleAssigned');
@@ -50,14 +55,26 @@ function App() {
         else if (y >= 3 && y <= 6) zoneClass = 'zone-firewall';
         else if (y >= 7) zoneClass = 'zone-slums';
 
-        const isRunner = gameState.players.runners.find(r => r.x === x && r.y === y);
-        const isIceWall = gameState.traps.iceWalls.find(w => w.active && w.x === x && w.y === y);
-        const isSentry = gameState.traps.sentries.find(s => s.active && s.x === x && s.y === y);
+        const isRunner = gameState.players.runners.find(r => r.x === x && r.y === y);                                                                                                          
+        const isIceWall = gameState.traps.iceWalls.find(w => w.active && w.x === x && w.y === y);                                                                                              
+        const isSentry = gameState.traps.sentries.find(s => s.active && s.x === x && s.y === y);                                                                                               
+        const isQueued = queuedActions.find(a => a.x === x && a.y === y);                                                                                                                      
+                                                                                                                                                                                                   
+        const isFuse = gameState.boardObjects.fuses.find(f => f.x === x && f.y === y && f.active);                                                                                             
+        const isVent = gameState.boardObjects.vents.find(v => v.x === x && v.y === y);                                                                                                         
+        const isData = gameState.boardObjects.dataNodes.find(d => d.x === x && d.y === y && d.active);   
 
-        let content = '';
-        if (isRunner) content = '🏃';
+        let content = '';                                                                                                                                                                      
+        if (isRunner) content = '🏃';                                                                                                                                                          
         else if (isIceWall) content = '🧊';                                                                                                                                                    
-        else if (isSentry) content = '👁️';
+        else if (isSentry) content = '👁️';                                                                                                                                                     
+        else if (isData) content = '💾';
+        else if (isFuse) content = '⚡';
+        else if (isVent) content = '🕳️';
+        else if (isQueued) {
+            if (role === 'runner') content = '📍';
+            else if (role === 'megacorp') content = isQueued.type === 'ICE_WALL' ? '🧊' : '👁️';
+        }
 
         tiles.push(
           <div
@@ -72,10 +89,24 @@ function App() {
     }
     return tiles;
   };
+
   const handleTileClick = (x, y) => {
     if (gameState.phase !== 'PLANNING') return;
-    console.log(`Clicked X:${x} Y:${y}`);                                                                                                                                                    
+    
+    if (role === 'runner') {
+      if (queuedActions.length >= 3) return;
+      setQueuedActions([...queuedActions, { action: 'move', x, y }]);
+    } else if (role === 'megacorp') {
+      if (queuedActions.length >= 2) return;
+      const type = queuedActions.length === 0 ? 'ICE_WALL' : 'SENTRY';
+      setQueuedActions([...queuedActions, { type, x, y }]);
+    }
   };
+
+  const lockInTurn = () => {
+    socket.emit('submitActions', role === 'megacorp' ? { traps: queuedActions } : queuedActions);
+  };
+
   return (                                                                                                                                                                                     
     <div className="game-container">
       <div className="sidebar">
@@ -86,6 +117,14 @@ function App() {
           {gameState.phase === 'PLANNING' && <p>Time Left: {gameState.timer}s</p>}
           {role === 'megacorp' && <p>Credits: {gameState.corpCredits || 100}</p>}
         </div>
+        
+        {gameState.phase === 'PLANNING' && (
+          <div style={{ marginTop: '20px' }}>
+            <p>Actions Queued: {queuedActions.length}</p>
+            <button onClick={lockInTurn}>LOCK IN</button>
+            <button onClick={() => setQueuedActions([])}>CLEAR</button>
+          </div>
+        )}
       </div>
 
       <div className="board">
