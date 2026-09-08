@@ -100,9 +100,20 @@ function resolveExecutionPhase() {
                         desiredMoves[targetKey].push({ id, x: currentAction.x, y: currentAction.y });
                     }
                 } 
-                else if (currentAction.action === 'ability_break') {
+                else if (currentAction.action === 'ability_break' && runner.role === 'Bruiser') {
                     gameState.traps.iceWalls = gameState.traps.iceWalls.filter(w => !(w.x === currentAction.x && w.y === currentAction.y));
-                    runner.trace += 30; 
+                    gameState.traps.sentries = gameState.traps.sentries.filter(s => !(s.x === currentAction.x && s.y === currentAction.y));
+                    runner.trace = Math.min(100, runner.trace + 30);
+                }
+                else if (currentAction.action === 'ability_phase' && runner.role === 'Ghost' && runner.abilityUses > 0) {
+                    runner.abilityUses--;
+                    const targetKey = `${currentAction.x},${currentAction.y}`;
+                    if (!desiredMoves[targetKey]) desiredMoves[targetKey] = [];
+                    desiredMoves[targetKey].push({ id, x: currentAction.x, y: currentAction.y });
+                }
+                else if (currentAction.action === 'ability_spoof' && runner.role === 'Daemon') {
+                    const sentry = gameState.traps.sentries.find(s => s.x === currentAction.x && s.y === currentAction.y);
+                    if (sentry) sentry.active = false;
                 }
             }
         });
@@ -112,6 +123,21 @@ function resolveExecutionPhase() {
             const runner = gameState.players.runners.find(r => r.id === winner.id);
             runner.x = winner.x;
             runner.y = winner.y;
+
+            const node = gameState.boardObjects.dataNodes.find(d => d.active && d.x === runner.x && d.y === runner.y);
+            if (node && !runner.hasData) {
+                node.active = false;
+                runner.hasData = true;
+                runner.trace = Math.min(100, runner.trace + 20);
+            }
+
+            const vent = gameState.boardObjects.vents.find(v => v.x === runner.x && v.y === runner.y);
+            if (vent) {
+                const otherVent = gameState.boardObjects.vents.find(v => v.x !== vent.x || v.y !== vent.y);
+                runner.x = otherVent.x;
+                runner.y = otherVent.y;
+                turnActions.runners[runner.id] = [];
+            }
             
             for (let i = 1; i < competitors.length; i++) {
                 turnActions.runners[competitors[i].id] = []; 
@@ -175,13 +201,17 @@ io.on('connection', (socket) => {
             socket.emit('roleAssigned', 'megacorp');
         }
         else if (requestedRole === 'runner' && gameState.players.runners.length < 3) {
+            const classes = ['Ghost', 'Bruiser', 'Daemon'];
+            const assignedClass = classes[gameState.players.runners.length];
+
             gameState.players.runners.push({
                 id: socket.id,
                 role: 'unassigned',
                 x: -1, y: -1,
                 trace: 0,
                 isFrozen: false,
-                hasData: false
+                hasData: false,
+                abilityUses: assignedClass === 'Ghost' ? 1 : 99
             });
             socket.emit('roleAssigned', 'runner');
         } else {
@@ -217,6 +247,28 @@ io.on('connection', (socket) => {
     socket.on('disconect', () => {
         if (gameState.players.megacorp === socket.id) gameState.players.megacorp = null;
         gameState.players.runners = gameState.players.runners.filter(r => r.id !== socket.id);
+    });
+
+    socket.on('sendChat', (message) => {
+        const runner = gameState.players.runners.find(r => r.id === socket.id);
+        if (!runner || runner.isFrozen) return;
+        runner.trace = Math.min(100, runner.trace + 2);
+
+        const intercepted = gameState.traps.sentries.some(s =>
+            s.active && Math.abs(s.x - runner.x) <= 1 && Math.abs(s.y - runner.y) <= 1
+        );
+
+        const chatData = {senderId: runner.id, text: message, intercepted};
+
+        gameState.players.runners.forEach(r => {
+            io.to(r.id).emit('chatMessage', chatData);
+        });
+
+        if (intercepted && gameState.players.megacorp) {
+            io.to(gameState.players.megacorp).emit('chatMessage', chatData);
+        }
+
+        io.emit('gameStateSync', getMaskedState());
     });
 });
 

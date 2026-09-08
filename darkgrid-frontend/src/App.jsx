@@ -8,6 +8,9 @@ function App() {
   const [role, setRole] = useState(null);
   const [gameState, setGameState] = useState(null);
   const [queuedActions, setQueuedActions] = useState([]);
+  const [actionMode, setActionMode] = useState('move');
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState('');
 
   useEffect(() => {
     setQueuedActions([]);
@@ -20,6 +23,9 @@ function App() {
     socket.on('gameStateSync', (state) => {
       setGameState(state);
     });
+    socket.on('chatMessage', (msg) => {
+      setChatMessages(prev => [...prev, msg]);
+    });
     socket.on('gameOver', ({winner}) => {
       alert(`${winner} Wins!`);
     });
@@ -27,6 +33,7 @@ function App() {
       socket.off('roleAssigned');
       socket.off('gameStateSync');
       socket.off('gameOver');
+      socket.off('chatMessage');
     };
   }, []);
 
@@ -95,12 +102,18 @@ function App() {
     
     if (role === 'runner') {
       if (queuedActions.length >= 3) return;
-      setQueuedActions([...queuedActions, { action: 'move', x, y }]);
+      setQueuedActions([...queuedActions, { action: actionMode, x, y }]);
     } else if (role === 'megacorp') {
       if (queuedActions.length >= 2) return;
       const type = queuedActions.length === 0 ? 'ICE_WALL' : 'SENTRY';
       setQueuedActions([...queuedActions, { type, x, y }]);
     }
+  };
+
+  const sendChat = () => {
+    if (!chatInput.trim()) return;
+    socket.emit('sendChat', chatInput);
+    setChatInput('');
   };
 
   const lockInTurn = () => {
@@ -116,11 +129,52 @@ function App() {
           <p>Turn: {gameState.turn} / {gameState.maxTurns}</p>
           {gameState.phase === 'PLANNING' && <p>Time Left: {gameState.timer}s</p>}
           {role === 'megacorp' && <p>Credits: {gameState.corpCredits || 100}</p>}
+          {role === 'runner' && (
+            <>
+              <p>Trace: <span style={{ color: 'red' }}>{gameState.players.runners.find(r => r.id === socket.id)?.trace || 0}%</span></p>
+              <p>Carrying Data: {gameState.players.runners.find(r => r.id === socket.id)?.hasData ? 'YES 💾' : 'NO'}</p>
+              <p>Status: {gameState.players.runners.find(r => r.id === socket.id)?.isFrozen ? '❄️ FROZEN' : 'ACTIVE'}</p>
+            </>
+          )}
+
+          <div className='burner-phone' style={{marginTop: '20px', borderTop: '2px solid #0f0', paddingTop: '10ox'}}>
+            <h3>Burner Phone</h3>
+            <div className="chat-box" style={{height: '150px', overflowY: 'auto', background: '#000', border: '1px solid #333', padding: '5px'}}>
+              {chatMessages.map((msg, i) => (
+                <p key={i} style={{ color: msg.intercepted && role === 'megacorp' ? 'red' : '#0f0', margin: '2px 0', fontSize: '12px' }}>
+                  {msg.intercepted && role === 'megacorp' ? '[INTERCEPTED]' : '>'}
+                  {msg.text}
+                </p>
+              ))}
+            </div>
+            {role === 'runner' && (
+              <div style={{ display: 'flex', marginTop: '5px' }}>
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && sendChat()}
+                  style={{flex:1, background:'#111', color: '#0f0', border: '1px solid #0f0', outline: 'none'}}
+                  placeholder="Send Messsage(+2 trace)..."
+                />
+                <button onClick={sendChat} style={{margin: '0 0 0 5px', padding: '5px'}}>SEND</button>
+              </div>
+            )}
+          </div>
         </div>
         
         {gameState.phase === 'PLANNING' && (
           <div style={{ marginTop: '20px' }}>
             <p>Actions Queued: {queuedActions.length}</p>
+            {role === 'runner' && (
+              <div style={{ margin: '10px 0', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                <p>Mode:</p>
+                <button onClick={() => setActionMode('move')} style={{ background: actionMode === 'move' ? '#0f0' : '#000', color: actionMode === 'move' ? '#000' : '#0f0', margin: '0' }}>Move Step</button>
+                <button onClick={() => setActionMode('ability_break')} style={{ background: actionMode === 'ability_break' ? '#0f0' : '#000', color: actionMode === 'ability_break' ? '#000' : '#0f0', margin: '0' }}>[Bruiser] Break Wall</button>
+                <button onClick={() => setActionMode('ability_phase')} style={{ background: actionMode === 'ability_phase' ? '#0f0' : '#000', color: actionMode === 'ability_phase' ? '#000' : '#0f0', margin: '0' }}>[Ghost] Phase Wall</button>
+                <button onClick={() => setActionMode('ability_spoof')} style={{ background: actionMode === 'ability_spoof' ? '#0f0' : '#000', color: actionMode === 'ability_spoof' ? '#000' : '#0f0', margin: '0' }}>[Daemon] Blind Sentry</button>
+              </div>
+            )}
             <button onClick={lockInTurn}>LOCK IN</button>
             <button onClick={() => setQueuedActions([])}>CLEAR</button>
           </div>
